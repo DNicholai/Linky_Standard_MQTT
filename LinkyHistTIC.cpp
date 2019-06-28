@@ -3,13 +3,6 @@
                format Linky "historique" ou anciens compteurs
                electroniques.
 
-  Lit les trames et decode les groupes :
-  BASE  : (base) index general compteur en Wh,
-  IINST : (iinst) intensit� instantan�e en A,
-  PAPP  : (papp) puissance apparente en VA.
-
-  Reference : ERDF-NOI-CPT_54E V1
-
   V06 : MicroQuettas mars 2018
   V07 : DPegon June 10th
     What works - it spits out converted values for EAST and SINST
@@ -47,32 +40,32 @@
        Longueur max : label + data = 7 + 9 = 16
 
   _FR : flag register
-
-    |  7  |  6  |   5  |   4  |   3  |  2  |   1  |   0  |
-    |     |     | _Dec | _GId | _Cks |     | _RxB | _Rec |
-
-     _Rec : receiving
-     _RxB : receive in buffer B, decode in buffer A
-     _GId : Group identification
-     _Dec : decode data
-
-  _DNFR : data available flags
-
-    |  7  |  6  |  5  |  4  |  3  |   2   |   1    |   0   |
-    |     |     |     |     |     | _papp | _iinst | _base |
-
-  Exemple of group :
-       <LF>lmnopqr<SP>123456789<SP>C<CR>
-           0123456  7 890123456  7 8  9
-     Cks:  xxxxxxx  x xxxxxxxxx    ^
-                                   |  iCks
-    Minimum length group  :
-           <LF>lmno<SP>12<SP>C<CR>
-               0123  4 56  7 8  9
-     Cks:      xxxx  x xx    ^
-                             |  iCks
-
-    The storing stops at CRC (included), ie a max of 19 chars
+VTIC	02	J
+DATE	H190323161039	G
+NGTF	      B00000000	*
+EASF10	000000000	"
+EASD01	000350847	;
+EASD02	000000000	!
+EASD03	000000000	"
+EASD04	000000000	#
+IRMS1	001	/
+URMS1	226	D
+PREF	06	E
+PCOUP	06	_
+SINSTS	00129	R
+SMAXSN	H190323120831	01748	B
+SMAXSN-1	H190322073403	02624	[
+CCASN	H190323160000	00098	E
+CCASN-1	H190323153000	00084	 
+UMOY1	H190323161000	226	2
+STGE	003A0001	:
+MSG1	PAS DE          MESSAGE         	<
+PRM	21376700393040	.
+RELAIS	000	B
+NTARF	01	N
+NJOURF	00	&
+NJOURF+1	00	B
+PJOURF+1	00008001 NONUTILE NONUTILE NONUTILE NONUTILE NONUTILE
 
 ***********************************************************************/
 
@@ -182,106 +175,14 @@ void LinkyHistTIC::Update()
                execution of all actions in the same turn of
                the loop */
 
-  /* 1st part, last action : decode information */
-  if (_FR & bLy_Dec)
-  {
-    ResetBits(_FR, bLy_Dec);     /* Clear requesting flag */
-    _pDec = strtok(NULL, CLy_Sep);
 
-    switch (_GId)
-    {
-      case CLy_base:
-        ba = atol(_pDec);
-        if (_base != ba)
-        { /* New value for _base */
-          _base = ba;
-          SetBits(_DNFR, bLy_base);
-        }
-        break;
 
-      case CLy_iinst:
-        i = (uint8_t) atoi(_pDec);
-        if (_iinst != i)
-        { /* New value for _iinst */
-          _iinst = i;
-          SetBits(_DNFR, bLy_iinst);
-        }
-        break;
-
-      case CLy_papp:
-        pa = atoi(_pDec);
-        if (_papp != pa)
-        { /* New value for papp */
-          _papp = pa;
-          SetBits(_DNFR, bLy_papp);
-        }
-        break;
-
-      default:
-        break;
-    }
-  }
-
-  /* 2nd part, second action : group identification */
-  if (_FR & bLy_GId)
-  {
-    ResetBits(_FR, bLy_GId);   /* Clear requesting flag */
-    _pDec = strtok(_pDec, CLy_Sep);
-
-    if (strcmp_P(_pDec, PLy_base) == 0)
-    {
-      Run = false;
-      _GId = CLy_base;
-    }
-
-    if (Run && (strcmp_P(_pDec, PLy_iinst) == 0))
-    {
-      Run = false;
-      _GId = CLy_iinst;
-    }
-
-    if (Run && (strcmp_P(_pDec, PLy_papp) == 0))
-    {
-      Run = false;
-      _GId = CLy_papp;
-    }
-
-    if (!Run)
-    {
-      SetBits(_FR, bLy_Dec);   /* Next = decode */
-    }
-  }
-
-  /* 3rd part, first action : check cks */
-  if (_FR & bLy_Cks)
-  {
-    ResetBits(_FR, bLy_Cks);   /* Clear requesting flag */
-    cks = 0;
-    if (_iCks >= CLy_MinLg)
-    { /* Message is long enough */
-      for (i = 0; i < _iCks - 1; i++)
-      {
-        cks += *(_pDec + i);
-      }
-      cks = (cks & 0x3f) + Car_SP;
-
-#ifdef LINKYDEBUG
+  
+//#ifdef LINKYDEBUG
       //Serial << _pDec << endl;
-#endif
+//#endif
 
-      if (cks == *(_pDec + _iCks))
-      { /* Cks is correct */
-        *(_pDec + _iCks - 1) = '\0';
-        /* Terminate the string just before the Cks */
-        SetBits(_FR, bLy_GId);  /* Next step, group identification */
 
-#ifdef LINKYDEBUG
-      }
-      else
-      {
-        i = *(_pDec + _iCks);
-        //Serial << F("Error Cks ") << cks << F(" - ") << i << endl;
-#endif
       }   /* Else, Cks error, do nothing */
 
     }     /* Message too short, do nothing */
@@ -428,16 +329,7 @@ int LinkyHistTIC::process(char* LIne)
   // Find next elem
   start = i+1;
   elem2[0] = '\0';
-  for (i = start; i <= strlen(LIne) - 2; i++)
-  {
-    // Find the delimiter
-    if (LIne[i] == DEMILITER)
-    {
-      memcpy(elem2, &LIne[start], i-start);
-      elem2[i-start] = '\0';
-      break;
-    }
-  }
+  
 
   //Serial("DEBUG --> New : %s - %s - %s\n", label, elem1, elem2);
   // Save value
@@ -468,30 +360,42 @@ int LinkyHistTIC::process(char* LIne)
 
 int LinkyHistTIC::isCheckSumOk(char* LIne)
 {
-  //Serial << LIne << endl;
-  unsigned int checksum_expected = 0;
-  unsigned int checksum_real = 0;
-  unsigned int i;
+  #ifdef LINKYDEBUG
+      Serial << LIne << endl;
+  #endif
+  
 
-  checksum_expected = LIne[strlen(LIne) - 1];
-  for (i = 0; i <= strlen(LIne) - 2; i++)
-  {
-    checksum_real += LIne[i];
+  unsigned int checksum = 0;
+  int SizeOfArray = strlen(MyArray);
+  for(int x = 0; x < SizeOfArray-1; x++)
+	{
+      	if (MyArray[x] != ' ')
+      	{
+          #ifdef LINKYDEBUG
+            Serial << MyArray[x];
+          #endif
+          checksum += MyArray[x];
+      	} else {
+          #ifdef LINKYDEBUG
+            Serial << "space ";
+          #endif          	
+          checksum += 0x09;
+      	}
   }
-  checksum_real = (checksum_real & 0x3F) + 0x20;
-
-  if (checksum_expected != checksum_real)
-  {
-    //printf("ERROR --> Checksum failed on line: \"%s\"\n", LIne);
-     char *p;
-     int linelen = strlen(LIne);
-    for (p = LIne; linelen-- > 0; p++)
-      //printf(" 0x%x", *p);
-    //printf("\n");
-    return -1;
+  checksum = (checksum & 0x3F) + 0x20; //Functionally equivalent to - checksum = (checksum % 0x40) + 0x20;
+  char aChar = 0 + checksum;
+  if (aChar == MyArray[SizeOfArray-1]){
+    #ifdef LINKYDEBUG
+      Serial << "--> CHECKSUM SUCCESS\n";
+    #endif    
+    return 0; // return a checksum success
+	} else {
+    #ifdef LINKYDEBUG
+      Serial << "Character is %c-%c\n", aChar, MyArray[SizeOfArray-1]; //RISKRISK
+    #endif 
+    return -1; // return a failed checksum
   }
 
-  return 0;
 }
 
 
