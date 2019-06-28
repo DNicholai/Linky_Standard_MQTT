@@ -21,6 +21,10 @@ V06  : Separate compilation version.
 
 
 /****************************** Constants *****************************/
+
+#define INTERVAL_MESSAGE1 30000
+unsigned long time_1 = 0;
+
 const uint8_t pin_LkyRx = 21;
 const uint8_t pin_LkyTx = 11;   /* !!! Not used but reserved !!! 
                                   * Do not use for anything else */
@@ -54,7 +58,7 @@ void setup()
 
   client.enableDebuggingMessages(); // Enable debugging messages sent to serial output
   client.enableHTTPWebUpdater(); // Enable the web updater. User and password default to values of MQTTUsername and MQTTPassword. These can be overrited with enableHTTPWebUpdater("user", "password").
-  client.enableLastWillMessage("TestClient/lastwill", "I am going offline");  // You can activate the retain flag by setting the third parameter to true
+  client.enableLastWillMessage("TestClient/lastwill", "Unexpected shutdown - Going offline");  // You can activate the retain flag by setting the third parameter to true
 
 
   /* Initialise serial link */
@@ -63,7 +67,7 @@ void setup()
   /* Initialise the Linky receiver */
   Linky.Init();
 
-  Serial << F("Bonjour") << endl;
+  Serial << F("Starting up...") << endl;
   }
 
 
@@ -75,15 +79,15 @@ void setup()
 void loop()
   {
 
-  client.loop();
   
-  Linky.Update();
-
-        client.publish("Linky/EAST", String(Linky.EASTv()), 1); // You can activate the retain flag by setting the third parameter to true
-        client.publish("Linky/SINSTS", String(Linky.SINSTSv()), 1); // You can activate the retain flag by setting the third parameter to true
-        
-      sleep(2000);
-  };
+    if(millis() > time_1 + INTERVAL_MESSAGE1){
+      time_1 = millis();
+      client.loop();
+      Linky.Update();
+      client.publish("Linky/EAST", String(Linky.EASTv()), 1); // You can activate the retain flag by setting the third parameter to true
+      client.publish("Linky/SINSTS", String(Linky.SINSTSv()), 1); // You can activate the retain flag by setting the third parameter to true
+    }  
+};
 
 
 // This function is called once everything is connected (Wifi and MQTT)
