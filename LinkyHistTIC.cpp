@@ -2,15 +2,12 @@
                Objet decodeur de teleinformation client (TIC)
                format Linky "historique" ou anciens compteurs
                electroniques.
-
   V06 : MicroQuettas mars 2018
   V07 : DPegon June 10th
     What works - it spits out converted values for EAST and SINST
-
     What needs improving, the checksums don't work, I haven't bothered sorting out why
     - there is a bunch of ghost code (from the previous iteration which could do with clearing out bit by bit
     - I'd like to return the values for SINSTS and EAST to the main function so that I could ask it to sleep nicely
-
 ***********************************************************************/
 
 /***************************** Includes *******************************/
@@ -20,16 +17,14 @@
 
 #include "EspMQTTClient.h"
 
-#define LINKYDEBUG false
+#define LINKYDEBUG 
 
 /***********************************************************************
                   Objet récepteur TIC Linky historique
-
   Trame historique :
   - délimiteurs de trame :     <STX> trame <ETX>
     <STX> = 0x02
     <ETX> = 0x03
-
   - groupes dans une trame : <LF>lmnopqrs<SP>123456789012<SP>C<CR>
     <LR> = 0x0A
     lmnopqrs = label 8 char max
@@ -38,35 +33,33 @@
     C = checksum 1 char
     <CR> = 0x0d
        Longueur max : label + data = 7 + 9 = 16
-
   _FR : flag register
-VTIC	02	J
-DATE	H190323161039	G
-NGTF	      B00000000	*
-EASF10	000000000	"
-EASD01	000350847	;
-EASD02	000000000	!
-EASD03	000000000	"
-EASD04	000000000	#
-IRMS1	001	/
-URMS1	226	D
-PREF	06	E
-PCOUP	06	_
-SINSTS	00129	R
-SMAXSN	H190323120831	01748	B
-SMAXSN-1	H190322073403	02624	[
-CCASN	H190323160000	00098	E
-CCASN-1	H190323153000	00084	 
-UMOY1	H190323161000	226	2
-STGE	003A0001	:
-MSG1	PAS DE          MESSAGE         	<
-PRM	21376700393040	.
-RELAIS	000	B
-NTARF	01	N
-NJOURF	00	&
-NJOURF+1	00	B
-PJOURF+1	00008001 NONUTILE NONUTILE NONUTILE NONUTILE NONUTILE
-
+VTIC  02  J
+DATE  H190323161039 G
+NGTF        B00000000 *
+EASF10  000000000 "
+EASD01  000350847 ;
+EASD02  000000000 !
+EASD03  000000000 "
+EASD04  000000000 #
+IRMS1 001 /
+URMS1 226 D
+PREF  06  E
+PCOUP 06  _
+SINSTS  00129 R
+SMAXSN  H190323120831 01748 B
+SMAXSN-1  H190322073403 02624 [
+CCASN H190323160000 00098 E
+CCASN-1 H190323153000 00084  
+UMOY1 H190323161000 226 2
+STGE  003A0001  :
+MSG1  PAS DE          MESSAGE           <
+PRM 21376700393040  .
+RELAIS  000 B
+NTARF 01  N
+NJOURF  00  &
+NJOURF+1  00  B
+PJOURF+1  00008001 NONUTILE NONUTILE NONUTILE NONUTILE NONUTILE
 ***********************************************************************/
 
 /****************************** Macros ********************************/
@@ -183,10 +176,8 @@ void LinkyHistTIC::Update()
 //#endif
 
 
-      }   /* Else, Cks error, do nothing */
-
-    }     /* Message too short, do nothing */
-  }
+     
+   
 
   /* 4th part, receiver processing */
   while (_LRx.available())
@@ -194,17 +185,39 @@ void LinkyHistTIC::Update()
     c = _LRx.read() & 0x7f;   /* Read char, exclude parity */
     //c = _LRx.read();
     //Serial << c;
-    content.concat(c);
+    content.concat(c);  
+    
+    /*
+    if (((c >= 0x21) && (c <= 0x7E)) || (c == 0x09) )
+    {
+      Serial << c;
+      content.concat(c);  
+    }
 
+    if (c == 0x0D)
+    {
+      //Serial << " TAB ";
+      content.concat(c);  
+    }
+    */
+if (c == 0x0a) 
+        {
+          content = "";
+          Serial << "Starting a new entry:" << endl << endl;
+        }
+
+
+    
 // if we detect a new line
-  if (((c >= 0x02) && (c <= 0x03)) || ((c >= 0x0a) && (c <= 0x0f)))
+  if (c == 0x0d) //(((c >= 0x02) && (c <= 0x03)) || ((c >= 0x0a) && (c <= 0x0f)))
         {
           
           
           if (content.length() > MIN_LINE_SIZE)
           {
-            //Serial << "new ------ ";
-            //Serial << content << endl;
+            
+              Serial << "Newline ------ !" << content << "!" << endl;
+            
 
             int str_len = content.length() + 1; 
             char LIne[str_len];
@@ -214,10 +227,13 @@ void LinkyHistTIC::Update()
                 Serial << ("SUCCESS --> Checksum OK on : \"%s\"\n", LIne);
                 
               } else {
-                //Serial << "NOT OK";
+                //Serial << "Checksum NOT OK";
                 LinkyHistTIC::process(LIne);
               }
                LIne[0] = 0;
+          } else 
+          {
+            Serial << "too short";
           }
           
     
@@ -233,48 +249,8 @@ void LinkyHistTIC::Update()
    
 
 
-    if (_FR & bLy_Rec)
-    { /* On going reception */
-      if (c == '\r')
-      { /* Received end of group char */
-        ResetBits(_FR, bLy_Rec);   /* Receiving complete */
-        SetBits(_FR, bLy_Cks);     /* Next check Cks */
-        _iCks = _iRec - 1;         /* Index of Cks in the message */
-        *(_pRec + _iRec) = '\0';   /* Terminate the string */
 
-        /* Swap reception and decode buffers */
-        if (_FR & bLy_RxB)
-        { /* Receiving in B, Decode in A, swap */
-          ResetBits(_FR, bLy_RxB);
-          _pRec = _BfA;       /* --> Receive in A */
-          _pDec = _BfB;       /* --> Decode in B */
-        }
-        else
-        { /* Receiving in A, Decode in B, swap */
-          SetBits(_FR, bLy_RxB);
-          _pRec = _BfB;     /* --> Receive in B */
-          _pDec = _BfA;     /* --> Decode in A */
-        }
-
-      }  /* End reception complete */
-      else
-      { /* Other character */
-        *(_pRec + _iRec) = c; /* Store received character */
-        _iRec += 1;
-        if (_iRec >= CLy_BfSz - 1)
-        { /* Buffer overrun */
-          ResetBits(_FR, bLy_Rec); /* Stop reception and do nothing */
-        }
-      }  /* End other character than '\r' */
-    }    /* End on-going reception */
-    else
-    { /* Reception not yet started */
-      if (c == '\n')
-      { /* Received start of group char */
-        _iRec = 0;
-        SetBits(_FR, bLy_Rec);   /* Start reception */
-      }
-    }
+    
       }  /* End while */
 
 }
@@ -336,8 +312,9 @@ int LinkyHistTIC::process(char* LIne)
   if(strcmp(label, "EAST") == 0) {
     
     val = LinkyHistTIC::strToUL(elem1);
-    Serial << "EAST found ---- " ;
-    Serial << val << endl;
+    
+      Serial << "EAST found ---- " << val << endl;
+    
     if (val > 67) // Got some bogus values around 67 
     {
       teleinfo.EAST = (unsigned int)val;
@@ -347,8 +324,10 @@ int LinkyHistTIC::process(char* LIne)
     else return -1;
     } else if(strcmp(label, "SINSTS") == 0) {
     val = LinkyHistTIC::strToUL(elem1);
-    Serial << "SINSTS found ---- " ;
-    Serial << val << endl;
+
+   
+      Serial << "SINSTS found ---- " << val << endl;
+    
     if (val > 1) // Got some false values around 67 when it should be  
     {
       teleinfo.SINSTS = (unsigned int)val;
@@ -360,39 +339,50 @@ int LinkyHistTIC::process(char* LIne)
 
 int LinkyHistTIC::isCheckSumOk(char* LIne)
 {
-  #ifdef LINKYDEBUG
-      Serial << LIne << endl;
-  #endif
   
 
   unsigned int checksum = 0;
-  int SizeOfArray = strlen(MyArray);
+  int SizeOfArray = strlen(LIne);
   for(int x = 0; x < SizeOfArray-1; x++)
-	{
-      	if (MyArray[x] != ' ')
-      	{
+  {
+        if (LIne[x] == 0x0a)
+        {
+            #ifdef LINKYDEBUG
+              Serial << "LF"; 
+            #endif
+          //checksum += LIne[x];
+        } else if (LIne[x] == 0x0d){
           #ifdef LINKYDEBUG
-            Serial << MyArray[x];
-          #endif
-          checksum += MyArray[x];
-      	} else {
+             Serial << "CR"; 
+          #endif            
+          //checksum += 0x09;
+        } else if (LIne[x] == 0x09){
           #ifdef LINKYDEBUG
-            Serial << "space ";
-          #endif          	
+             Serial << "HT"; 
+          #endif            
           checksum += 0x09;
-      	}
+        } else {
+          #ifdef LINKYDEBUG
+             Serial << LIne[x]; 
+          #endif            
+          checksum += LIne[x];
+        }
+        //Serial << "-";
   }
-  checksum = (checksum & 0x3F) + 0x20; //Functionally equivalent to - checksum = (checksum % 0x40) + 0x20;
+  //Serial << "(ENDL)" << endl;
+  checksum = (checksum & 0x3f) + 0x20; //Functionally equivalent to - checksum = (checksum % 0x40) + 0x20;
   char aChar = 0 + checksum;
-  if (aChar == MyArray[SizeOfArray-1]){
+  //Serial << "Arraysize is " << SizeOfArray;
+  if (aChar == LIne[SizeOfArray-1]){
     #ifdef LINKYDEBUG
       Serial << "--> CHECKSUM SUCCESS\n";
     #endif    
     return 0; // return a checksum success
-	} else {
-    #ifdef LINKYDEBUG
-      Serial << "Character is %c-%c\n", aChar, MyArray[SizeOfArray-1]; //RISKRISK
-    #endif 
+  } else {
+    /*#ifdef LINKYDEBUG
+      Serial << "Character is " << aChar << " against the expected " << LIne[SizeOfArray-1]; //RISKRISK
+    #endif
+    */ 
     return -1; // return a failed checksum
   }
 
