@@ -188,13 +188,13 @@ void LinkyHistTIC::Update()
     content.concat(c);  
     
     /*
-    if (((c >= 0x21) && (c <= 0x7E)) || (c == 0x09) )
+    if (((c >= 0x21) && (c <= 0x7e)) || (c == 0x09) )
     {
       Serial << c;
       content.concat(c);  
     }
 
-    if (c == 0x0D)
+    if (c == 0x0d)
     {
       //Serial << " TAB ";
       content.concat(c);  
@@ -233,7 +233,7 @@ if (c == 0x0a)
                LIne[0] = 0;
           } else 
           {
-            Serial << "too short";
+            Serial << "too short" << "|" << content << "|-GONE NOW";
           }
           
     
