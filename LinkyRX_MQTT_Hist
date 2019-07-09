@@ -1,15 +1,11 @@
 /***********************************************************************
                         Récepteur TIC Linky
-                        Mode historique & standard (in progress)
+                        Mode historique
 
 V03  : External SoftwareSerial. Tested OK on 07/03/18.
 V04  : Replaced available() by new(). Tested Ok on 08/03/18.
 V05  : Internal SoftwareSerial. Cf special construction syntax.
 V06  : Separate compilation version.
-V07  : Major update with simplifications, confirmed working and stable.  
-To do : 
-  - add retain flag on mqtt messages
-  - add error handling for no data received. 
 
 ***********************************************************************/
 
@@ -112,6 +108,14 @@ void publish (String topic, String payload)
 
 void publish_value(String sn, String name, String value, bool number=false)
 {
+        if (!client.connected())
+    {
+        client.connect("arduinoClient");
+        #ifdef DEBUG
+        Serial.println("Preparing to publish - MQTT Connected");
+        #endif
+    } 
+    
     if (value != "")
     {
         if (number)
