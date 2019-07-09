@@ -101,12 +101,12 @@ void publish (String topic, String payload)
         #endif
     } 
     
-    client.publish(topic.c_str(), payload.c_str());
+    client.publish(topic.c_str(), payload.c_str(),true);
     Serial << "Just published:" << payload.c_str() << " on " << topic.c_str() << endl;
 }
 
 
-void publish_value(String sn, String name, String value, bool number=false)
+void publish_value(String sn, String name, String value, bool number=true)
 {
         if (!client.connected())
     {
@@ -121,8 +121,8 @@ void publish_value(String sn, String name, String value, bool number=false)
         if (number)
             value = String(value.toInt()); // Double convertion to remove leading zeros etc...
         else
-            value = "\"" + value + "\"";
-        publish("cm/teleinfo-" + sn + "/data/" + name, "{\"value\": " + value + "}");
+            
+        publish("Linky/" + name, value, number);
     }
 }
 
@@ -196,7 +196,7 @@ void setup() {
   setup_wifi();
   client.setServer(mqtt_server, 1883);
   delay(3000);
-  client.publish("Debug/boot", "test"); 
+   
 
   //Increment boot number and print it every reboot
   ++bootCount;
