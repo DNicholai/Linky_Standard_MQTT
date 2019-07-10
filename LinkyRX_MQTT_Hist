@@ -2,10 +2,11 @@
                         Récepteur TIC Linky
                         Mode historique
 
-V03  : External SoftwareSerial. Tested OK on 07/03/18.
-V04  : Replaced available() by new(). Tested Ok on 08/03/18.
+
+
 V05  : Internal SoftwareSerial. Cf special construction syntax.
 V06  : Separate compilation version.
+V07  : 2019/07/10 - Working well with the exception of some sleep issues - works only in historic mode for the present time.  Further work required to get it working in Std TIC mode
 
 ***********************************************************************/
 
@@ -16,6 +17,8 @@ V06  : Separate compilation version.
 
 #include "WiFi.h";
 #include <PubSubClient.h>
+
+
 
 
 
@@ -34,8 +37,9 @@ V06  : Separate compilation version.
 #endif
 
 #ifndef MQTT_TOPIC_BASE_DEBUG
-#define MQTT_TOPIC_BASE_DEBUG "exp/Linky_esp32/data/"
+#define MQTT_TOPIC_BASE_DEBUG "Linky_esp32/debug/"
 #endif
+
 
 
 #define DEBUG true
@@ -43,6 +47,7 @@ V06  : Separate compilation version.
 
 #ifdef DEBUG
 String debug_val;
+String sleep_msg;
 #endif 
 
 /****************************** Constants *****************************/
@@ -77,11 +82,11 @@ String label_;
 String value;
 char checksum1;
 char checksum2;
-String sn;    //Serial Number - corresponds to ADCO in historic mode
-String meter_index_c;   //heures Creuses - corresponds to HCHC in historic mode
-String meter_index_p;   //Heures Pleines - corresponds to HCHP in historic mode
-String current;         //Current - corresponds to IINST in historic mode
-String power;           //Power - Corresponds to PAPP in historic mode
+String sn = "";    //Serial Number - corresponds to ADCO in historic mode
+String meter_index_c = "";   //heures Creuses - corresponds to HCHC in historic mode
+String meter_index_p = "";   //Heures Pleines - corresponds to HCHP in historic mode
+String current = "";         //Current - corresponds to IINST in historic mode
+String power = "";           //Power - Corresponds to PAPP in historic mode
 
 
 /************************* Object instanciation ***********************/
@@ -95,13 +100,13 @@ void publish (String topic, String payload)
 {
     if (!client.connected())
     {
-        client.connect("arduinoClient");
+        client.connect("Linky_ESP32");
         #ifdef DEBUG
         Serial.println("Preparing to publish - MQTT Connected");
         #endif
     } 
     
-    client.publish(topic.c_str(), payload.c_str(),true);
+    client.publish(topic.c_str(), payload.c_str());
     Serial << "Just published:" << payload.c_str() << " on " << topic.c_str() << endl;
 }
 
@@ -110,7 +115,7 @@ void publish_value(String sn, String name, String value, bool number=true)
 {
         if (!client.connected())
     {
-        client.connect("arduinoClient");
+        client.connect("Linky_ESP32");
         #ifdef DEBUG
         Serial.println("Preparing to publish - MQTT Connected");
         #endif
@@ -119,10 +124,10 @@ void publish_value(String sn, String name, String value, bool number=true)
     if (value != "")
     {
         if (number)
-            value = String(value.toInt()); // Double convertion to remove leading zeros etc...
-        else
-            
-        publish("Linky/" + name, value, number);
+        {
+          value = String(value.toInt()); // Double convertion to remove leading zeros etc...
+        }
+    publish("Linky-" + sn + "-data/" + name, value);
     }
 }
 
@@ -130,8 +135,12 @@ void publish_value(String sn, String name, String value, bool number=true)
 
 
 void print_wakeup_reason(){
+  
   esp_sleep_wakeup_cause_t wakeup_reason;
-
+  #ifdef DEBUG
+    publish(mqtt_topic_base_debug, "Wakeup reason");
+    Serial << "Wake-up reason" << endl;
+  #endif  
   wakeup_reason = esp_sleep_get_wakeup_cause();
 
   switch(wakeup_reason)
@@ -195,15 +204,15 @@ void setup() {
   
   setup_wifi();
   client.setServer(mqtt_server, 1883);
-  delay(3000);
-   
+  delay(500);
+
 
   //Increment boot number and print it every reboot
   ++bootCount;
   Serial.println("Boot number: " + String(bootCount));
   dtostrf(bootCount, 6, 1, msg); // Leave room for too large numbers!
   
-  publish("debug",msg);
+  publish("Linky/bootcount",msg);
 
   Linky.begin(CLy_Bds);
 
@@ -246,7 +255,7 @@ void loop() {
               {
                   
                   #ifdef DEBUG
-                  publish(mqtt_topic_base_debug + "debug", debug_val + "\"firmware_md5\": \"" + "fake_val_MD5" + "\"}");
+                  //publish(mqtt_topic_base_debug, debug_val);
                   Serial << "debug" << debug_val << "\"firmware_md5\": \"" <<  "\"}" << endl;
                   #endif
                   
@@ -261,10 +270,23 @@ void loop() {
                       Serial << sn << " Rms_current: " << current << endl;
                       Serial << sn << " Apparent_power: " << power << endl;
 
+
+                      long sleep_min = 15;
+                      long uS_TO_M_FACTOR = 60000000;  /* Conversion factor for micro seconds to seconds */
+                      esp_sleep_enable_timer_wakeup((sleep_min * uS_TO_M_FACTOR)-micros());                       
                       #ifdef DEBUG
-                      Serial.println("Going to sleep...");
-                      #endif                       
-                      ESP.deepSleep(65e6 - micros());  // ~ 60 secondes
+
+                      
+                      Serial.println("Going to sleep for " + String(sleep_min) + " minutes...");
+                      sleep_msg += "Deepsleep for " + String(sleep_min) + " minutes";
+                      publish(mqtt_topic_base_debug, sleep_msg);
+                      #endif
+                      
+                      
+                      
+                      Serial.flush();       // IMPT - flush right before the sleep or set the sleep timer and then go to sleep immediately after.  Otherwise you get errors - https://github.com/espressif/arduino-esp32/issues/1651
+                      esp_deep_sleep_start();
+ 
                       // Wake-up is done by a hardware reset
                       #ifdef DEBUG
                       Serial.println("This should not be printed");
@@ -297,7 +319,7 @@ void loop() {
           case 2:
               checksum1 += c;
               //Serial <<" f ";
-              if ((c == 0x20) || (c == 0x09))
+              if ((c == 0x20) || (c == 0x09))     // SPACE or TAB
                   state = 3;
               else
                   label_ += String(c);
@@ -305,7 +327,7 @@ void loop() {
     
           // Value
           case 3:
-              if ((c == 0x20) || (c == 0x09))
+              if ((c == 0x20) || (c == 0x09)) // SPACE or TAB
               {
                   checksum2 += c;
                   state = 4;
@@ -339,6 +361,7 @@ void loop() {
                   //Serial << "End bit!!!" << endl << endl;
                   #ifdef DEBUG
                   debug_val += "\"" + label_ + "\": \"" + value + "\", ";
+                  //publish(mqtt_topic_base_debug, debug_val);
                   #endif
                   state = 6;
                   if (label_ == "ADCO")
@@ -356,15 +379,24 @@ void loop() {
               {
                   #ifdef DEBUG
                     Serial <<  "error5" << endl;
+                    publish(mqtt_topic_base_debug, "error5");
                   #endif
                   state = 0;
               }
               break;
-     }         
+     }         // End of switch loop
 
 
 
 
     
-  }
+  } else if (millis() > TIMEOUT_IF_NO_TELEINFO)
+    {
+        #ifdef DEBUG
+          Serial.println("No reception from meter... Going to sleep...");
+          publish(mqtt_topic_base_debug, "No reception from meter... Going to sleep...");
+        #endif                       
+        ESP.deepSleep(600e6 - micros());  // 600 secondes
+        
+    }
 }  
