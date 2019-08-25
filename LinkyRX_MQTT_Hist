@@ -1,3 +1,5 @@
+
+    
 /***********************************************************************
                         Récepteur TIC Linky
                         Mode historique
@@ -26,9 +28,6 @@ V07  : 2019/07/10 - Working well with the exception of some sleep issues - works
 #define CLy_Bds 1200      /* Transmission speed in bds */
 
 #define uS_TO_S_FACTOR 1000000  /* Conversion factor for micro seconds to seconds */
-#define TIME_TO_SLEEP  10        /* Time ESP32 will go to sleep (in seconds) */
-
-
 
 
 /****************************** Macros ********************************/
@@ -37,7 +36,7 @@ V07  : 2019/07/10 - Working well with the exception of some sleep issues - works
 #endif
 
 #ifndef MQTT_TOPIC_BASE_DEBUG
-#define MQTT_TOPIC_BASE_DEBUG "Linky_esp32/debug/"
+#define MQTT_TOPIC_BASE_DEBUG "Linky_esp32/debug"
 #endif
 
 
@@ -138,10 +137,11 @@ void print_wakeup_reason(){
   
   esp_sleep_wakeup_cause_t wakeup_reason;
   #ifdef DEBUG
-    publish(mqtt_topic_base_debug, "Wakeup reason");
+    
     Serial << "Wake-up reason" << endl;
   #endif  
   wakeup_reason = esp_sleep_get_wakeup_cause();
+  publish(mqtt_topic_base_debug, String(wakeup_reason));
 
   switch(wakeup_reason)
   {
@@ -212,7 +212,7 @@ void setup() {
   Serial.println("Boot number: " + String(bootCount));
   dtostrf(bootCount, 6, 1, msg); // Leave room for too large numbers!
   
-  publish("Linky/bootcount",msg);
+  publish(mqtt_topic_base_debug,msg);
 
   Linky.begin(CLy_Bds);
 
@@ -395,8 +395,11 @@ void loop() {
         #ifdef DEBUG
           Serial.println("No reception from meter... Going to sleep...");
           publish(mqtt_topic_base_debug, "No reception from meter... Going to sleep...");
-        #endif                       
-        ESP.deepSleep(600e6 - micros());  // 600 secondes
+        #endif
+        
+        long sleep_min = 5;
+        long uS_TO_M_FACTOR = 60000000;  /* Conversion factor for micro seconds to seconds */                       
+        ESP.deepSleep((sleep_min * uS_TO_M_FACTOR) - micros());  // 600 secondes
         
     }
 }  
